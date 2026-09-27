@@ -1,12 +1,15 @@
-const users = require("../controllers/user.server.controllers");
+const express = require('express');
+const router = express.Router();
+const userController = require('../controllers/user.server.controllers');
+const authenticate = require('../middleware/authenticate');
 
-module.exports = function(app){
-    app.route("/users")
-        .post(users.create_account);
+// Register new user, no authentication required
+router.post('/', userController.registerUser);
+// User login endpoint
+router.post('/login', userController.loginUser);
+// Get current authenticated user profile, requires valid session token
+router.get('/me', authenticate, userController.getMe);
+// Logout current user, clear session token
+router.post('/logout', authenticate, userController.logoutUser);
 
-    app.route("/login")
-        .post(users.login);
-
-    app.route("/logout")
-        .post(users.logout);
-}
+module.exports = router;
