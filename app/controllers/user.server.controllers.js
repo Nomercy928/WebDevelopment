@@ -1,4 +1,4 @@
-const User = require('../models/user.server.model');
+const db = require('../../database');
 const bcrypt = require('bcrypt');
 const { v4: uuidv4 } = require('uuid');
 
@@ -9,38 +9,41 @@ const { v4: uuidv4 } = require('uuid');
 const registerUser = async (req, res) => {
   try {
     const { email, password, first_name, last_name } = req.body;
-
-    // Validate required input fields
     if (!email || !password || !first_name || !last_name) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
-    // Check if email already exists in database
-    const existingUser = await User.findOne({ where: { email } });
+    // Check if email exists
+    const existingUser = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
+        if (err) return reject(err);
+        resolve(row);
+      });
+    });
     if (existingUser) {
       return res.status(400).json({ message: "Email is already registered" });
     }
 
-    // Hash user password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create new user record
-    const newUser = await User.create({
-      first_name,
-      last_name,
-      email,
-      password: hashedPassword
+    const hashedPassword = await bcrypt.hash(password,10);
+    // Insert new user
+    const newUser = await new Promise((resolve, reject) => {
+      db.run(`INSERT INTO users (first_name,last_name,email,password) VALUES (?,?,?,?)`,
+        [first_name,last_name,email,hashedPassword],
+        function(err) {
+          if(err) return reject(err);
+          resolve({user_id: this.lastID, first_name,last_name,email});
+        }
+      )
     });
 
-    // Return 201 Created, do NOT return password or salt
     return res.status(201).json({
       user_id: newUser.user_id,
       first_name: newUser.first_name,
       last_name: newUser.last_name,
       email: newUser.email
     });
-
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -52,23 +55,30 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const { email, password } = req.body;
-
-    const user = await User.findOne({ where: { email } });
+    const user = await new Promise((resolve, reject) => {
+      db.get("SELECT * FROM users WHERE email = ?", [email], (err, row) => {
+        if(err) return reject(err);
+        resolve(row);
+      })
+    });
     if (!user) {
       return res.status(401).json({ message: "Incorrect email or password" });
     }
-
-    // Compare plain password with stored hash
     const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       return res.status(401).json({ message: "Incorrect email or password" });
     }
-
-    // Generate new unique session token
     const sessionToken = uuidv4();
-    user.session_token = sessionToken;
-    await user.save();
-
+    // update token
+    await new Promise((resolve,reject)=>{
+      db.run(`UPDATE users SET session_token = ? WHERE user_id = ?`,
+        [sessionToken, user.user_id],
+        (err)=>{
+          if(err) return reject(err);
+          resolve();
+        }
+      )
+    });
     return res.status(200).json({
       session_token: sessionToken,
       user: {
@@ -78,8 +88,8 @@ const loginUser = async (req, res) => {
         email: user.email
       }
     });
-
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -91,17 +101,15 @@ const loginUser = async (req, res) => {
  */
 const getMe = async (req, res) => {
   try {
-    // req.user is attached by authenticate middleware
     const user = req.user;
-
     return res.status(200).json({
       user_id: user.user_id,
       first_name: user.first_name,
       last_name: user.last_name,
       email: user.email
     });
-
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: "Server error" });
   }
 };
@@ -114,13 +122,18 @@ const getMe = async (req, res) => {
 const logoutUser = async (req, res) => {
   try {
     const user = req.user;
-    user.session_token = null;
-    await user.save();
-
-    // 204 No Content, no response body
+    await new Promise((resolve,reject)=>{
+      db.run(`UPDATE users SET session_token = NULL WHERE user_id = ?`,
+        [user.user_id],
+        (err)=>{
+          if(err) return reject(err);
+          resolve();
+        }
+      )
+    })
     return res.sendStatus(204);
-
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ message: "Server error" });
   }
 };
