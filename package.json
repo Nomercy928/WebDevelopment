@@ -27,6 +27,7 @@
   },
   "homepage": "https://gitcode.com/MMJISE/auctionary_starter#readme",
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "body-parser": "^1.20.2",
     "chai": "^4.3.8",
     "chai-http": "^4.4.0",
@@ -37,6 +38,7 @@
     "mongoose": "^9.9.5",
     "morgan": "^1.10.0",
     "nodemon": "^3.0.1",
-    "sqlite3": "^5.1.6"
+    "sqlite3": "^5.1.6",
+    "uuid": "^14.0.2"
   }
 }
